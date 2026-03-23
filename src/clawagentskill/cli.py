@@ -1,6 +1,7 @@
 """CLI interface for clawagentskill.
 
-Provides 5 subcommands: find, adopt, port, scan, status.
+Provides 8 subcommands: find, adopt, port, scan, status,
+state-init, validate-prereqs, get-field.
 """
 
 from __future__ import annotations
@@ -202,6 +203,46 @@ def _cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_state_init(args: argparse.Namespace) -> int:
+    """Create a run directory with meta.yaml and emit JSON envelope."""
+    from clawagentskill.config import load_config
+    from clawagentskill.state import StateManager
+
+    config = load_config()
+    base = Path(args.run_dir_base) if args.run_dir_base else Path.cwd() / config.run_dir
+    state = StateManager.create_run(
+        base, args.query, skill_url=args.skill_url, scan_mode=args.scan_mode,
+    )
+    print(json.dumps({"run_dir": str(state.run_dir)}))
+    return 0
+
+
+def _cmd_validate_prereqs(args: argparse.Namespace) -> int:
+    """Check that required binaries (npx, python3) exist on PATH."""
+    import shutil
+
+    required_bins = ["npx", "python3"]
+    missing = [b for b in required_bins if not shutil.which(b)]
+    if missing:
+        print(f"Missing: {', '.join(missing)}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _cmd_get_field(args: argparse.Namespace) -> int:
+    """Read a single field from meta.yaml in a run directory."""
+    from clawagentskill.state import StateManager
+
+    state = StateManager(Path(args.run_dir))
+    meta = state.load_meta()
+    value = meta.get(args.key)
+    if value is None:
+        print(f"ERROR: key '{args.key}' not found", file=sys.stderr)
+        return 1
+    print(str(value))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser with all subcommands."""
     parser = argparse.ArgumentParser(
@@ -246,6 +287,40 @@ def build_parser() -> argparse.ArgumentParser:
     p_status = subparsers.add_parser("status", help="Show recent adoption runs")
     p_status.add_argument("--limit", type=int, default=10)
     p_status.set_defaults(func=_cmd_status)
+
+    # -- Lobster-compatible subcommands --
+
+    # state-init
+    p_state_init = subparsers.add_parser(
+        "state-init", help="Create run directory with meta.yaml (Lobster compat)",
+    )
+    p_state_init.add_argument("--query", required=True, help="Search query")
+    p_state_init.add_argument("--skill-url", default="", help="Direct skills.sh or GitHub URL")
+    p_state_init.add_argument(
+        "--scan-mode", default="quality",
+        choices=["quality", "efficiency", "simplicity"],
+        help="Scan mode override",
+    )
+    p_state_init.add_argument(
+        "--run-dir-base", default=None,
+        help="Base directory for runs (default: memory/skill-adopt-runs relative to cwd)",
+    )
+    p_state_init.set_defaults(func=_cmd_state_init)
+
+    # validate-prereqs
+    p_validate = subparsers.add_parser(
+        "validate-prereqs", help="Check required binaries exist on PATH (Lobster compat)",
+    )
+    p_validate.add_argument("--run-dir", required=True, help="Path to run directory")
+    p_validate.set_defaults(func=_cmd_validate_prereqs)
+
+    # get-field
+    p_get_field = subparsers.add_parser(
+        "get-field", help="Read a field from meta.yaml in a run directory (Lobster compat)",
+    )
+    p_get_field.add_argument("--run-dir", required=True, help="Path to run directory")
+    p_get_field.add_argument("--key", required=True, help="Field name to read from meta.yaml")
+    p_get_field.set_defaults(func=_cmd_get_field)
 
     return parser
 
