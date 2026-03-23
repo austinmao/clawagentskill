@@ -1,0 +1,35 @@
+# clawagentskill configuration
+# Place as clawagentskill.yaml in your workspace root
+
+# Publishers whose skills skip security scanning (Tier A)
+# openclaw and anthropic are always included (hardcoded baseline)
+trusted_publishers:
+  - openclaw
+  - anthropic
+  # - my-org  # requires confirmation on each adopt
+
+# Quality gate thresholds
+thresholds:
+  tier_b_installs: 10000     # >= this = Tier B (community trusted)
+  caution_installs: 1000     # >= this = efficiency scan mode
+  scrutiny_installs: 100     # >= this = allowed; below = quality scan mode
+
+# GitHub repos for agent discovery (port command)
+agent_registries:
+  - repo: VoltAgent/awesome-claude-code-subagents
+    type: claude-code
+    path: categories/
+  - repo: nicobailon/mergisi
+    type: claude-code
+    path: agents/
+
+# State artifact directory (relative to workspace root)
+run_dir: memory/skill-adopt-runs
+
+# Enabled scanners (remove to disable)
+scanners:
+  - prefilter
+  - permission
+  - config
+  - injection
+  # - snyk  # uncomment if SNYK_TOKEN is set

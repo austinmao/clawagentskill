@@ -1,0 +1,53 @@
+# ClawSpec test scenarios for clawagentskill
+# Run: clawspec run scenarios.yaml
+
+scenarios:
+  - id: tier-a-skips-scanners
+    description: "Tier A skill (openclaw/resend) skips scanners and installs directly"
+    command: "python3 -m clawagentskill adopt 'openclaw/resend' --yes"
+    assertions:
+      - verdict == "install"
+      - tier == "A"
+      - scan_results is empty or skipped
+
+  - id: smoke-prereq-fail
+    description: "Pipeline fails gracefully when required binary is missing"
+    command: "python3 -m clawagentskill adopt 'test-skill' --yes"
+    env:
+      PATH: "/usr/bin"  # Remove npx from PATH
+    assertions:
+      - exit_code != 0
+      - stage_failed == "validate-prereqs"
+
+  - id: blocked-clawhavoc-pattern
+    description: "ClawHavoc C2 IP in skill triggers pre-filter block"
+    command: "python3 -m clawagentskill scan tests/fixtures/clawhavoc-skill.md"
+    assertions:
+      - exit_code == 1
+      - prefilter.status == "blocked"
+      - findings contain "clawhavoc-indicator"
+
+  - id: warn-triggers-rebuild
+    description: "Overpermissioned skill from untrusted publisher triggers rebuild verdict"
+    command: "python3 -m clawagentskill scan tests/fixtures/overpermissioned-skill.md"
+    assertions:
+      - permission.status == "warn"
+      - findings contain "exfil-risk"
+
+  - id: e2e-stripe-install
+    description: "End-to-end adoption of stripe integration skill from marketplace"
+    command: "python3 -m clawagentskill adopt 'stripe integration' --yes --force"
+    requires:
+      bins: ["npx"]
+    assertions:
+      - exit_code == 0 or exit_code == 1  # depends on npx availability
+      - pipeline completes without crash
+
+  - id: snyk-optional-graceful
+    description: "Snyk scanner skips gracefully when SNYK_TOKEN is not set"
+    command: "python3 -m clawagentskill scan tests/fixtures/clean-skill.md --json"
+    env:
+      SNYK_TOKEN: ""
+    assertions:
+      - snyk.status == "skipped" or snyk not in results
+      - other scanners run normally
