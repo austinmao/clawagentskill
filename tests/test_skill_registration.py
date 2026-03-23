@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-import pytest
 
 
 REPO_ROOT = Path(__file__).parent.parent.parent  # clawagentskill/ -> openclaw/
@@ -20,9 +19,6 @@ class TestClawAgentSkillRegistration:
 
     def test_skill_md_has_valid_frontmatter(self):
         skill_path = REPO_ROOT / "skills" / "platform" / "governance" / "clawagentskill" / "SKILL.md"
-        if not skill_path.exists():
-            pytest.skip("SKILL.md not yet created")
-
         content = skill_path.read_text()
         parts = content.split("---", 2)
         assert len(parts) >= 3, "No YAML frontmatter found"
@@ -35,9 +31,6 @@ class TestClawAgentSkillRegistration:
 
     def test_skill_md_requires_python3(self):
         skill_path = REPO_ROOT / "skills" / "platform" / "governance" / "clawagentskill" / "SKILL.md"
-        if not skill_path.exists():
-            pytest.skip("SKILL.md not yet created")
-
         content = skill_path.read_text()
         parts = content.split("---", 2)
         frontmatter = yaml.safe_load(parts[1])
