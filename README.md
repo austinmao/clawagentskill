@@ -140,6 +140,51 @@ These governance modules activate automatically when their dependencies are pres
 - **ClawWrap** — outbound target validation
 - **Paperclip** — governance issue tracking
 
+## OpenClaw Gateway Plugin
+
+ClawAgentSkill ships with a gateway plugin that registers the `clawagentskill` tool directly in the OpenClaw gateway. The plugin delegates all actions to the Python CLI via `child_process`.
+
+### Installation
+
+1. Copy the `extensions/clawagentskill/` directory into your OpenClaw workspace:
+
+```bash
+cp -r extensions/clawagentskill/ ~/.openclaw/extensions/clawagentskill/
+```
+
+2. Register the plugin in your `~/.openclaw/openclaw.json`:
+
+```json
+{
+  "extensions": {
+    "clawagentskill": {
+      "repoRoot": "/path/to/your/workspace",
+      "timeoutMs": 60000
+    }
+  }
+}
+```
+
+3. Restart the gateway:
+
+```bash
+openclaw gateway restart
+```
+
+### Plugin Configuration
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `repoRoot` | string | `$OPENCLAW_WORKSPACE` or `cwd` | Workspace root containing the clawagentskill package |
+| `pythonBin` | string | `<repoRoot>/clawpipe/.venv/bin/python` | Path to Python binary |
+| `timeoutMs` | integer | `60000` | CLI execution timeout in milliseconds |
+
+### Supported Actions
+
+`find`, `adopt`, `port`, `scan`, `status`, `state-init`, `validate-prereqs`, `get-field`
+
+See the [openclaw.plugin.json](extensions/clawagentskill/openclaw.plugin.json) for the full config schema.
+
 ## OpenClaw Suite
 
 Part of the OpenClaw open-source toolchain:
