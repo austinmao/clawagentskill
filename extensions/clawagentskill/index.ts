@@ -67,6 +67,18 @@ const TOOL_SCHEMA = {
   },
 };
 
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
+      catch { resolve({}); }
+    });
+    req.on("error", reject);
+  });
+}
+
 function buildArgs(params) {
   const { action, query, source, skill_id, file_path, run_dir, field, execution_style } = params;
   const args = ["-m", "clawagentskill", action];
@@ -137,6 +149,32 @@ function runCli(pythonBin, repoRoot, args, timeoutMs) {
   });
 }
 
+function runCliJson(pythonBin, repoRoot, args, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const env = {
+      ...process.env,
+      PYTHONPATH: path.join(repoRoot, "clawagentskill", "src"),
+    };
+
+    execFile(
+      pythonBin,
+      args,
+      { cwd: repoRoot, env, timeout: timeoutMs },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(stderr?.trim() || error.message));
+          return;
+        }
+        resolve({
+          success: true,
+          output: stdout?.trim() ?? "",
+          stderr: stderr?.trim() ?? "",
+        });
+      }
+    );
+  });
+}
+
 export function register(api) {
   const pluginConfig = api.config ?? {};
   const repoRoot =
@@ -159,7 +197,159 @@ export function register(api) {
     }
   });
 
-  console.log(`[clawagentskill] tool registered`);
+  // --- HTTP webhook routes ---
+
+  api.registerHttpRoute({
+    path: "/clawagentskill/find",
+    auth: "gateway",
+    match: "exact",
+    handler: async (req, res) => {
+      const body = await readBody(req);
+      const args = ["-m", "clawagentskill", "find"];
+      if (body.query) args.push(String(body.query));
+      try {
+        const result = await runCliJson(pythonBin, repoRoot, args, timeoutMs);
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ status: "error", error: err.message }));
+      }
+    },
+  });
+
+  api.registerHttpRoute({
+    path: "/clawagentskill/adopt",
+    auth: "gateway",
+    match: "exact",
+    handler: async (req, res) => {
+      const body = await readBody(req);
+      const args = ["-m", "clawagentskill", "adopt"];
+      if (body.source) args.push(String(body.source));
+      if (body.name) args.push(String(body.name));
+      if (body.execution_style) args.push("--execution-style", String(body.execution_style));
+      try {
+        const result = await runCliJson(pythonBin, repoRoot, args, timeoutMs);
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ status: "error", error: err.message }));
+      }
+    },
+  });
+
+  api.registerHttpRoute({
+    path: "/clawagentskill/port",
+    auth: "gateway",
+    match: "exact",
+    handler: async (req, res) => {
+      const body = await readBody(req);
+      const args = ["-m", "clawagentskill", "port"];
+      if (body.source) args.push(String(body.source));
+      if (body.name) args.push(String(body.name));
+      try {
+        const result = await runCliJson(pythonBin, repoRoot, args, timeoutMs);
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ status: "error", error: err.message }));
+      }
+    },
+  });
+
+  api.registerHttpRoute({
+    path: "/clawagentskill/scan",
+    auth: "gateway",
+    match: "exact",
+    handler: async (req, res) => {
+      const body = await readBody(req);
+      const args = ["-m", "clawagentskill", "scan"];
+      if (body.file_path) args.push(String(body.file_path));
+      try {
+        const result = await runCliJson(pythonBin, repoRoot, args, timeoutMs);
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ status: "error", error: err.message }));
+      }
+    },
+  });
+
+  api.registerHttpRoute({
+    path: "/clawagentskill/status",
+    auth: "gateway",
+    match: "exact",
+    handler: async (req, res) => {
+      const args = ["-m", "clawagentskill", "status"];
+      try {
+        const result = await runCliJson(pythonBin, repoRoot, args, timeoutMs);
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ status: "error", error: err.message }));
+      }
+    },
+  });
+
+  api.registerHttpRoute({
+    path: "/clawagentskill/state-init",
+    auth: "gateway",
+    match: "exact",
+    handler: async (req, res) => {
+      const args = ["-m", "clawagentskill", "state-init"];
+      try {
+        const result = await runCliJson(pythonBin, repoRoot, args, timeoutMs);
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ status: "error", error: err.message }));
+      }
+    },
+  });
+
+  api.registerHttpRoute({
+    path: "/clawagentskill/validate-prereqs",
+    auth: "gateway",
+    match: "exact",
+    handler: async (req, res) => {
+      const args = ["-m", "clawagentskill", "validate-prereqs"];
+      try {
+        const result = await runCliJson(pythonBin, repoRoot, args, timeoutMs);
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ status: "error", error: err.message }));
+      }
+    },
+  });
+
+  api.registerHttpRoute({
+    path: "/clawagentskill/get-field",
+    auth: "gateway",
+    match: "exact",
+    handler: async (req, res) => {
+      const body = await readBody(req);
+      const args = ["-m", "clawagentskill", "get-field"];
+      if (body.field) args.push(String(body.field));
+      if (body.file_path) args.push(String(body.file_path));
+      try {
+        const result = await runCliJson(pythonBin, repoRoot, args, timeoutMs);
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ status: "error", error: err.message }));
+      }
+    },
+  });
+
+  console.log(`[clawagentskill] tool + 8 HTTP routes registered`);
 }
 
 export function activate(api) {
