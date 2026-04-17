@@ -29,6 +29,7 @@ from clawagentskill.discover import skills_sh
 from clawagentskill.govern import clawspec, clawwrap, paperclip, scaffold
 from clawagentskill.scan.prefilter import scan_prefilter
 from clawagentskill.scan.runner import run_scanners
+from clawagentskill.select import select_best
 from clawagentskill.state import StateManager, infer_publisher, slugify
 
 
@@ -99,9 +100,12 @@ async def run_adopt(
             "source": "direct_url",
         }]
     else:
-        candidates = skills_sh.search(query)
+        registry_results = skills_sh.search(query)
         local_results = local_discover.search(query, root)
-        candidates = local_results + candidates  # local first
+        # Registry first so rank_key stability biases toward external results
+        # when keys tie. select_best applies real ranking, so order is not
+        # semantically load-bearing anymore.
+        candidates = registry_results + local_results
 
     if not candidates:
         meta["stage_failed"] = "search"
@@ -110,8 +114,10 @@ async def run_adopt(
 
     state.write_yaml("search-candidates.yaml", {"candidates": candidates})
 
-    # Stage 4: select
-    selected = candidates[0]  # Best match (local first, then marketplace)
+    # Stage 4: select — rank by exact match, real install count, tier, then
+    # local-already-installed tiebreak. Replaces naive `candidates[0]` which
+    # let synthetic local sentinel (999_999) beat real registry counts.
+    selected = select_best(candidates, query)
     install_count = selected.get("install_count", 0)
     publisher = selected.get("publisher", publisher)
 
