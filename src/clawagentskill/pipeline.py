@@ -8,6 +8,7 @@ Stages: state-init → validate-prereqs → search → select → download → p
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -29,7 +30,39 @@ from clawagentskill.discover import skills_sh
 from clawagentskill.govern import clawspec, clawwrap, paperclip, scaffold
 from clawagentskill.scan.prefilter import scan_prefilter
 from clawagentskill.scan.runner import run_scanners
+from clawagentskill.select import select_best
 from clawagentskill.state import StateManager, infer_publisher, slugify
+
+
+def _resolve_install_base(
+    *,
+    target_root: Path | None,
+    workspace_root: Path | None,
+) -> Path:
+    """Resolve the base directory under which skills/ will be written.
+
+    Resolution order (first match wins):
+      1. Explicit ``target_root`` kwarg (e.g. from --target CLI flag).
+      2. Explicit ``workspace_root`` kwarg (back-compat with existing callers).
+      3. ``$OPENCLAW_WORKSPACE`` env var — the bind-mounted workspace inside
+         gateway containers (e.g. ``/home/node/.openclaw``).
+      4. ``$HOME/.openclaw`` fallback.
+      5. ``Path.cwd()`` as an absolute last resort.
+
+    This avoids defaulting to the container image's ephemeral cwd (``/app``),
+    which caused installed skills to be wiped on ``docker compose up -d``.
+    """
+    if target_root is not None:
+        return target_root
+    if workspace_root is not None:
+        return workspace_root
+    env_workspace = os.environ.get("OPENCLAW_WORKSPACE", "").strip()
+    if env_workspace:
+        return Path(env_workspace)
+    home = os.environ.get("HOME", "").strip()
+    if home:
+        return Path(home) / ".openclaw"
+    return Path.cwd()
 
 
 async def run_adopt(
@@ -40,6 +73,7 @@ async def run_adopt(
     auto_approve: bool = False,
     force: bool = False,
     workspace_root: Path | None = None,
+    target_root: Path | None = None,
 ) -> dict[str, Any]:
     """Run the full 16-stage adoption pipeline.
 
@@ -49,12 +83,20 @@ async def run_adopt(
         scan_mode: Scanner configuration (quality|efficiency|simplicity).
         auto_approve: Skip approval prompt.
         force: Install even if below quality thresholds.
-        workspace_root: Workspace root. Defaults to cwd.
+        workspace_root: Workspace root for local discovery and run-dir base.
+            Defaults to ``$OPENCLAW_WORKSPACE``, then ``$HOME/.openclaw``, then cwd.
+        target_root: Explicit install-target base (e.g. from ``--target`` CLI flag).
+            When set, overrides ``workspace_root`` and env fallbacks for target
+            path resolution. See :func:`_resolve_install_base`.
 
     Returns:
         Dict with pipeline result including verdict, target_path, etc.
     """
-    root = workspace_root or Path.cwd()
+    install_base = _resolve_install_base(
+        target_root=target_root,
+        workspace_root=workspace_root,
+    )
+    root = workspace_root or install_base
     config = load_config(root)
 
     # Stage 1: state-init
@@ -99,9 +141,12 @@ async def run_adopt(
             "source": "direct_url",
         }]
     else:
-        candidates = skills_sh.search(query)
+        registry_results = skills_sh.search(query)
         local_results = local_discover.search(query, root)
-        candidates = local_results + candidates  # local first
+        # Registry first so rank_key stability biases toward external results
+        # when keys tie. select_best applies real ranking, so order is not
+        # semantically load-bearing anymore.
+        candidates = registry_results + local_results
 
     if not candidates:
         meta["stage_failed"] = "search"
@@ -110,8 +155,10 @@ async def run_adopt(
 
     state.write_yaml("search-candidates.yaml", {"candidates": candidates})
 
-    # Stage 4: select
-    selected = candidates[0]  # Best match (local first, then marketplace)
+    # Stage 4: select — rank by exact match, real install count, tier, then
+    # local-already-installed tiebreak. Replaces naive `candidates[0]` which
+    # let synthetic local sentinel (999_999) beat real registry counts.
+    selected = select_best(candidates, query)
     install_count = selected.get("install_count", 0)
     publisher = selected.get("publisher", publisher)
 
@@ -119,8 +166,17 @@ async def run_adopt(
     tier = classify_tier(publisher, install_count, config.trusted_publishers)
     scan_mode_resolved = derive_scan_mode(tier, install_count, scan_mode)
 
-    # Derive target path
-    target_path = root / "skills" / "platform" / "governance" / slugify(selected["name"]) / "SKILL.md"
+    # Derive target path — anchored on install_base (bind-mounted workspace
+    # when running inside a gateway container), NOT on ``root`` which may be
+    # the ephemeral container cwd (e.g. /app).
+    target_path = (
+        install_base
+        / "skills"
+        / "platform"
+        / "governance"
+        / slugify(selected["name"])
+        / "SKILL.md"
+    )
     if selected.get("target_path"):
         target_path = Path(selected["target_path"])
 
@@ -282,8 +338,13 @@ def adopt_sync(
     auto_approve: bool = False,
     force: bool = False,
     workspace_root: Path | None = None,
+    target_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Sync wrapper for run_adopt."""
+    """Sync wrapper for run_adopt.
+
+    ``target_root`` is a pass-through kwarg for the ``--target`` CLI flag
+    (owned by cli.py). See :func:`run_adopt` for resolution semantics.
+    """
     return asyncio.run(run_adopt(
         query,
         url=url,
@@ -291,4 +352,5 @@ def adopt_sync(
         auto_approve=auto_approve,
         force=force,
         workspace_root=workspace_root,
+        target_root=target_root,
     ))

@@ -137,19 +137,38 @@ class TestSkillsShSearch:
         assert results[0]["name"] == "notion"
 
     def test_skills_sh_text_output(self) -> None:
+        # The skills CLI always emits ANSI-colored output — never bare plain text.
+        # Mock the actual format it produces so the parser is tested against reality.
+        ansi_output = (
+            "\n"
+            "\x1b[38;5;250m███████╗██╗  ██╗\x1b[0m\n"
+            "\n"
+            "\x1b[38;5;102mInstall with\x1b[0m npx skills add <owner/repo@skill>\n"
+            "\n"
+            "\x1b[38;5;145mwshobson/agents@resend-email-sender\x1b[0m \x1b[36m5200 installs\x1b[0m\n"
+            "\x1b[38;5;102m└ https://skills.sh/wshobson/agents/resend-email-sender\x1b[0m\n"
+            "\n"
+            "\x1b[38;5;145msome-user/skills@stripe-integration\x1b[0m \x1b[36m120 installs\x1b[0m\n"
+            "\x1b[38;5;102m└ https://skills.sh/some-user/skills/stripe-integration\x1b[0m\n"
+        )
+
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = "resend-email-sender\nstripe-integration\n"
+        mock_result.stdout = ansi_output
 
         with patch("clawagentskill.discover.skills_sh.subprocess.run", return_value=mock_result):
             results = skills_sh.search("resend")
 
         assert len(results) == 2
         assert results[0]["source"] == "npx_search"
-        assert results[0]["publisher"] == "unknown"
+        assert results[0]["publisher"] == "wshobson"
         assert results[0]["tier"] == "C"
-        # Stub candidates use slugified line as name
         assert results[0]["name"] == "resend-email-sender"
+        assert results[0]["install_ref"] == "wshobson/agents@resend-email-sender"
+        assert results[0]["install_count"] == 5200
+        assert results[0]["install_url"] == "https://skills.sh/wshobson/agents/resend-email-sender"
+        assert results[1]["name"] == "stripe-integration"
+        assert results[1]["install_count"] == 120
 
     def test_skills_sh_timeout(self) -> None:
         with patch(
