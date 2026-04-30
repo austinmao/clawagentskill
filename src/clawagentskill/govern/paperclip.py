@@ -37,6 +37,7 @@ def export(skill_id: str, run_dir: Path) -> dict[str, Any]:
                 "title": f"Skill adopted: {skill_id}",
                 "type": "governance",
                 "source": "clawagentskill",
+                "kind": "task",
                 "created_at": datetime.now(timezone.utc).isoformat(),
             },
             timeout=10,

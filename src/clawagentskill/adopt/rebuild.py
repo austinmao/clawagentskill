@@ -38,7 +38,12 @@ def rebuild(staging_path: Path, run_dir: Path) -> bool:
         )
         if result.returncode == 0:
             return True
-        print(f"OpenProse rebuild failed: {result.stderr}", file=sys.stderr)
+        stderr_text = result.stderr or ""
+        # ModuleNotFoundError means compiler isn't installed in this environment — skip gracefully
+        if "ModuleNotFoundError" in stderr_text or "No module named" in stderr_text:
+            print("OpenProse not available — installing skill as-is with warning", file=sys.stderr)
+            return True
+        print(f"OpenProse rebuild failed: {stderr_text}", file=sys.stderr)
         return False
     except (subprocess.TimeoutExpired, FileNotFoundError):
         # compiler.engine.cli not available — skip rebuild, install as-is

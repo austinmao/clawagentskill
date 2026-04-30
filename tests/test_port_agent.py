@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
@@ -53,7 +53,7 @@ class TestPortAgent:
         mock_response = AsyncMock()
         mock_response.status_code = 200
         mock_response.text = cc_agent_content
-        mock_response.raise_for_status = AsyncMock()
+        mock_response.raise_for_status = Mock()
 
         with (
             patch("clawagentskill.adopt.port_agent.httpx.AsyncClient") as mock_client_cls,
@@ -113,7 +113,7 @@ class TestPortAgent:
         mock_response = AsyncMock()
         mock_response.status_code = 200
         mock_response.text = malicious_content
-        mock_response.raise_for_status = AsyncMock()
+        mock_response.raise_for_status = Mock()
 
         with (
             patch("clawagentskill.adopt.port_agent.httpx.AsyncClient") as mock_client_cls,
